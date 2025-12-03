@@ -1,0 +1,57 @@
+name: Policy-as-Code Gates
+ 
+# Trigger this pipeline on any Pull Request
+on: [pull_request]
+ 
+jobs:
+  policy-scan:
+    name: Security & Policy Checks
+    runs-on: ubuntu-latest
+ 
+    steps:
+      # 1. Check out the code from the repo
+      - name: Checkout Code
+        uses: actions/checkout@v3
+ 
+      # 2. Install Terraform (needed to generate the plan)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+ 
+      # 3. Initialize and Plan Terraform
+      # We create a binary plan, then convert it to JSON for Conftest
+      - name: Generate Terraform Plan
+        run: |
+          terraform init
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > tfplan.json
+        continue-on-error: false
+ 
+      # 4. Install & Run Conftest (The Custom Policies)
+      # This checks irsa.rego and tags.rego against your plan
+      - name: Run Conftest (Custom Policies)
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+      
+      - name: Install Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.45.0/conftest_0.45.0_Linux_x86_64.tar.gz
+          tar xzf conftest_0.45.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+          
+      - name: Execute Conftest Checks
+        run: |
+          echo "Running Conftest..."
+          conftest test tfplan.json -p policy/
+        # If this step fails, the pipeline stops here.
+ 
+      # 5. Run Checkov (The Security Scanner)
+      # This checks for generic security issues (Public S3, etc.)
+      - name: Run Checkov (Security Scanner)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          soft_fail: false # Set to true if you don't want to break the build on errors
+          framework: terraform
