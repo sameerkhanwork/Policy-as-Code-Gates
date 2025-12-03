@@ -12,7 +12,7 @@ resource "aws_s3_bucket" "bad_bucket" {
 resource "kubernetes_service_account" "bad_sa" {
   metadata {
     name = "bad-service-account"
-    # Missing annotations = { "eks.amazonaws.com/role-arn" = ... }
+    ## Missing annotations = { "eks.amazonaws.com/role-arn" = ... }
   }
 }
  
